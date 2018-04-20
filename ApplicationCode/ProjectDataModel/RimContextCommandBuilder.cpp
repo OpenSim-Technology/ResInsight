@@ -300,6 +300,10 @@ caf::CmdFeatureMenuBuilder RimContextCommandBuilder::commandsFromSelection()
                  dynamic_cast<Rim3dWellLogFileCurve*>(uiItem) ||
                  dynamic_cast<Rim3dWellLogRftCurve*>(uiItem))
         {
+            menuBuilder << "RicPaste3dWellLogExtractionCurveFeature";
+            
+            menuBuilder.addSeparator();
+            
             menuBuilder << "RicAdd3dWellLogCurveFeature";
             menuBuilder << "RicAdd3dWellLogFileCurveFeature";
             menuBuilder << "RicAdd3dWellLogRftCurveFeature";

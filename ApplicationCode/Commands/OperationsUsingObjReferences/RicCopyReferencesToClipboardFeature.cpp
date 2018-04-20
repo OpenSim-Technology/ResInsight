@@ -19,6 +19,7 @@
 
 #include "RicCopyReferencesToClipboardFeature.h"
 
+#include "Rim3dWellLogExtractionCurve.h"
 #include "RimEclipseCase.h"
 #include "RimEclipseView.h"
 #include "RimFractureTemplate.h"
@@ -164,6 +165,10 @@ bool RicCopyReferencesToClipboardFeature::isCopyOfObjectSupported(caf::PdmObject
         if (!wellAllocPlot && !rftPlot) return true;
     }
     else if (dynamic_cast<RimFractureTemplate*>(pdmObject))
+    {
+        return true;
+    }
+    else if (dynamic_cast<Rim3dWellLogExtractionCurve*>(pdmObject))
     {
         return true;
     }
