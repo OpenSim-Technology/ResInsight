@@ -42,10 +42,10 @@ std::vector<cvf::Vec3d> RigWellPathGeometryTools::calculateLineSegmentNormals(co
 
     cvf::Vec3d dominantDirection = estimateDominantDirectionInXYPlane(vertices);
 
-    const cvf::Vec3d projectionPlaneNormal = (up ^ dominantDirection).getNormalized();
+    cvf::Vec3d projectionPlaneNormal = (up ^ dominantDirection).getNormalized();
     CVF_ASSERT(projectionPlaneNormal * dominantDirection <= std::numeric_limits<double>::epsilon());
 
-    cvf::Vec3d lastNormal;
+    double sumDotWithUp = 0.0;
     for (size_t i = 0; i < vertices.size() - 1; ++i)
     {
         cvf::Vec3d p1 = vertices[i];
@@ -60,10 +60,20 @@ std::vector<cvf::Vec3d> RigWellPathGeometryTools::calculateLineSegmentNormals(co
             normal                      = normal.getTransformedVector(cvf::Mat3d::fromRotation(tangent, planeAngle));
         }
         pointNormals.push_back(normal);
-        lastNormal = normal;
+        sumDotWithUp += normal * up;
+    }
+    
+    pointNormals.push_back(pointNormals.back());
+
+    if (sumDotWithUp < 0.0)
+    {
+        cvf::Vec3d rotatedUp = up.getTransformedVector(cvf::Mat3d::fromRotation(cvf::Vec3d(0, 1, 0), planeAngle));
+        for (cvf::Vec3d& normal : pointNormals)
+        {
+            normal *= -1.0;            
+        }
     }
 
-    pointNormals.push_back(lastNormal);
 
     return interpolateUndefinedNormals(up, pointNormals, vertices);
 }
