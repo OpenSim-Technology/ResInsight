@@ -84,7 +84,7 @@ void Rim3dWellLogFileCurve::setDefaultFileCurveDataInfo()
 //--------------------------------------------------------------------------------------------------
 ///
 //--------------------------------------------------------------------------------------------------
-void Rim3dWellLogFileCurve::curveValuesAndMds(std::vector<double>* values, std::vector<double>* measuredDepthValues) const
+void Rim3dWellLogFileCurve::curveValuesAndMdsAtTimeStep(std::vector<double>* values, std::vector<double>* measuredDepthValues, int timeStep) const
 {
     CAF_ASSERT(values != nullptr);
     CAF_ASSERT(measuredDepthValues != nullptr);

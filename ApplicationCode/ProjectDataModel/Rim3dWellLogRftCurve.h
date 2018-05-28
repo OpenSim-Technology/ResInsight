@@ -43,7 +43,7 @@ public:
     Rim3dWellLogRftCurve();
     virtual ~Rim3dWellLogRftCurve();
 
-    virtual void curveValuesAndMds(std::vector<double>* values, std::vector<double>* measuredDepthValues) const override;
+    virtual void curveValuesAndMdsAtTimeStep(std::vector<double>* values, std::vector<double>* measuredDepthValues, int timeStep = -1) const override;
 
     virtual QString resultPropertyString() const override;
     virtual QString name() const override;

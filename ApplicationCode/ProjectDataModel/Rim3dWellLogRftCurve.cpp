@@ -66,7 +66,7 @@ Rim3dWellLogRftCurve::~Rim3dWellLogRftCurve()
 //--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
-void Rim3dWellLogRftCurve::curveValuesAndMds(std::vector<double>* values, std::vector<double>* measuredDepthValues) const
+void Rim3dWellLogRftCurve::curveValuesAndMdsAtTimeStep(std::vector<double>* values, std::vector<double>* measuredDepthValues, int timeStep) const
 {
     if (m_2dWellLogRftCurve->wellName() == QString())
     {
