@@ -28,6 +28,7 @@
 #include "RigFemPartCollection.h"
 #include "RigFemPartGrid.h"
 #include "RigFemPartResultsCollection.h"
+#include "RigFemPartTensorTools.h"
 #include "RigFemResultAddress.h"
 #include "RigFemTypes.h"
 #include "RigGeoMechCaseData.h"
@@ -96,12 +97,12 @@ void RivTensorResultPartMgr::appendDynamicGeometryPartsToModel(cvf::ModelBasicLi
         const RigFemPart*       part = femParts->part(partIdx);
         std::vector<caf::Ten3f> elmTensors;
 
-        calculateElementTensors(*part, vertexTensors, &elmTensors);
+        RigFemPartTensorTools::calculateElementTensors(*part, vertexTensors, &elmTensors);
 
         std::array<std::vector<float>, 3>      elmPrincipals;
         std::vector<std::array<cvf::Vec3f, 3>> elmPrincipalDirections;
 
-        calculatePrincipalsAndDirections(elmTensors, &elmPrincipals, &elmPrincipalDirections);
+        RigFemPartTensorTools::calculatePrincipalsAndDirections(elmTensors, &elmPrincipals, &elmPrincipalDirections);
 
         std::vector<RivGeoMechPartMgrCache::Key> partKeys =
             m_rimReservoirView->vizLogic()->keysToVisiblePartMgrs((int)frameIndex);
@@ -194,88 +195,7 @@ void RivTensorResultPartMgr::appendDynamicGeometryPartsToModel(cvf::ModelBasicLi
     }
 }
 
-//--------------------------------------------------------------------------------------------------
-///
-//--------------------------------------------------------------------------------------------------
-void RivTensorResultPartMgr::calculateElementTensors(const RigFemPart&              part,
-                                                     const std::vector<caf::Ten3f>& vertexTensors,
-                                                     std::vector<caf::Ten3f>*       elmTensors)
-{
-    CVF_ASSERT(elmTensors);
 
-    size_t elmCount = part.elementCount();
-    elmTensors->resize(elmCount);
-
-    for (int elmIdx = 0; elmIdx < static_cast<int>(elmCount); elmIdx++)
-    {
-        if (RigFemTypes::elmentNodeCount(part.elementType(elmIdx)) == 8)
-        {
-            caf::Ten3f tensorSumOfElmNodes = vertexTensors[part.elementNodeResultIdx(elmIdx, 0)];
-            for (int i = 1; i < 8; i++)
-            {
-                tensorSumOfElmNodes = tensorSumOfElmNodes + vertexTensors[part.elementNodeResultIdx(elmIdx, i)];
-            }
-
-            (*elmTensors)[elmIdx] = tensorSumOfElmNodes * (1.0 / 8.0);
-        }
-    }
-
-    std::array<std::vector<float>, 3>      elmPrincipals;
-    std::vector<std::array<cvf::Vec3f, 3>> elmPrincipalDirections;
-
-    elmPrincipals[0].resize(elmCount);
-    elmPrincipals[1].resize(elmCount);
-    elmPrincipals[2].resize(elmCount);
-
-    elmPrincipalDirections.resize(elmCount);
-
-    for (size_t nIdx = 0; nIdx < elmCount; ++nIdx)
-    {
-        cvf::Vec3f principalDirs[3];
-        cvf::Vec3f principalValues = (*elmTensors)[nIdx].calculatePrincipals(principalDirs);
-
-        elmPrincipals[0][nIdx] = principalValues[0];
-        elmPrincipals[1][nIdx] = principalValues[1];
-        elmPrincipals[2][nIdx] = principalValues[2];
-
-        elmPrincipalDirections[nIdx][0] = principalDirs[0];
-        elmPrincipalDirections[nIdx][1] = principalDirs[1];
-        elmPrincipalDirections[nIdx][2] = principalDirs[2];
-    }
-}
-
-//--------------------------------------------------------------------------------------------------
-///
-//--------------------------------------------------------------------------------------------------
-void RivTensorResultPartMgr::calculatePrincipalsAndDirections(const std::vector<caf::Ten3f>&          tensors,
-                                                              std::array<std::vector<float>, 3>*      principals,
-                                                              std::vector<std::array<cvf::Vec3f, 3>>* principalDirections)
-{
-    CVF_ASSERT(principals);
-    CVF_ASSERT(principalDirections);
-
-    size_t elmCount = tensors.size();
-
-    (*principals)[0].resize(elmCount);
-    (*principals)[1].resize(elmCount);
-    (*principals)[2].resize(elmCount);
-
-    (*principalDirections).resize(elmCount);
-
-    for (size_t nIdx = 0; nIdx < elmCount; ++nIdx)
-    {
-        cvf::Vec3f principalDirs[3];
-        cvf::Vec3f principalValues = tensors[nIdx].calculatePrincipals(principalDirs);
-
-        (*principals)[0][nIdx] = principalValues[0];
-        (*principals)[1][nIdx] = principalValues[1];
-        (*principals)[2][nIdx] = principalValues[2];
-
-        (*principalDirections)[nIdx][0] = principalDirs[0];
-        (*principalDirections)[nIdx][1] = principalDirs[1];
-        (*principalDirections)[nIdx][2] = principalDirs[2];
-    }
-}
 //--------------------------------------------------------------------------------------------------
 ///
 //--------------------------------------------------------------------------------------------------

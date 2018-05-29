@@ -53,6 +53,7 @@ public:
 
     void appendDynamicGeometryPartsToModel(cvf::ModelBasicList* model, size_t frameIndex) const;
 
+   
 private:
     struct TensorVisualization
     {
@@ -73,14 +74,6 @@ private:
     };
 
 private:
-    static void calculateElementTensors(const RigFemPart&              part,
-                                        const std::vector<caf::Ten3f>& vertexTensors,
-                                        std::vector<caf::Ten3f>*       elmTensors);
-
-    static void calculatePrincipalsAndDirections(const std::vector<caf::Ten3f>&          tensors,
-                                                 std::array<std::vector<float>, 3>*      principals,
-                                                 std::vector<std::array<cvf::Vec3f, 3>>* principalDirections);
-
     static cvf::Vec3f calculateFaceNormal(const RigFemPartNodes&     nodes,
                                           const std::vector<size_t>& quadVerticesToNodeIdxMapping,
                                           int                        quadVertex);

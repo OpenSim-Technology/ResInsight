@@ -28,6 +28,10 @@ add_library( ${PROJECT_NAME}
 	RigFemResultPosEnum.h
     RimGeoMechGeometrySelectionItem.h
     RimGeoMechGeometrySelectionItem.cpp
+	RigGeoMechWellPathPropertyCalculator.h
+	RigGeoMechWellPathPropertyCalculator.cpp
+	RigFemPartTensorTools.h
+	RigFemPartTensorTools.cpp
 )
 
 target_include_directories(${PROJECT_NAME}

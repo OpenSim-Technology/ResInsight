@@ -26,9 +26,11 @@
 #include "RigGeoMechCaseData.h"
 #include "RigEclipseWellLogExtractor.h"
 #include "RigGeoMechWellLogExtractor.h"
+#include "RigGeoMechWellPathPropertyCalculator.h"
 #include "RigResultAccessorFactory.h"
 #include "RigCaseCellResultsData.h"
 #include "RigFemPartResultsCollection.h"
+#include "RigWellPath.h"
 #include "RimEclipseCase.h"
 #include "RimGeoMechCase.h"
 #include "Rim3dView.h"
@@ -217,11 +219,15 @@ void Rim3dWellLogExtractionCurve::curveValuesAndMdsAtTimeStep(std::vector<double
     }
     else if (geomExtractor.notNull())
     {
-        *measuredDepthValues = geomExtractor->measuredDepth();
+        //*measuredDepthValues = geomExtractor->measuredDepth();
 
         m_geomResultDefinition->loadResult();
 
-        geomExtractor->curveData(m_geomResultDefinition->resultAddress(), timeStep, values);
+        //geomExtractor->curveData(m_geomResultDefinition->resultAddress(), timeStep, values);
+        *measuredDepthValues = wellPath->wellPathGeometry()->measureDepths();
+        const std::vector<cvf::Vec3d>& wellPathPoints = wellPath->wellPathGeometry()->wellPathPoints();
+
+        RigGeoMechWellPathPropertyCalculator::calculateFractionGradientAlongWellPath(dynamic_cast<RimGeoMechCase*>(m_case()), timeStep, this->rkbDiff(), wellPathPoints, values);
     }
 }
 
@@ -324,6 +330,41 @@ QString Rim3dWellLogExtractionCurve::createCurveAutoName() const
 
     return generatedCurveName.join(", ");
 }
+
+//--------------------------------------------------------------------------------------------------
+/// 
+//--------------------------------------------------------------------------------------------------
+double Rim3dWellLogExtractionCurve::rkbDiff() const
+{
+    RimWellPath* wellPath;
+    firstAncestorOrThisOfType(wellPath);
+
+    if (wellPath && wellPath->wellPathGeometry())
+    {
+        RigWellPath* geo = wellPath->wellPathGeometry();
+
+        if (geo->hasDatumElevation())
+        {
+            return geo->datumElevation();
+        }
+
+        // If measured depth is zero, use the z-value of the well path points
+        if (geo->m_wellPathPoints.size() > 0 && geo->m_measuredDepths.size() > 0)
+        {
+            double epsilon = 1e-3;
+
+            if (cvf::Math::abs(geo->m_measuredDepths[0]) < epsilon)
+            {
+                double diff = geo->m_measuredDepths[0] - (-geo->wellPathPoints()[0].z());
+
+                return diff;
+            }
+        }
+    }
+
+    return HUGE_VAL;
+}
+
 
 //--------------------------------------------------------------------------------------------------
 ///
