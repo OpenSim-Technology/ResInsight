@@ -439,7 +439,17 @@ void RimGeoMechResultDefinition::loadResult()
 {
     if (m_geomCase && m_geomCase->geoMechData())
     {
-        m_geomCase->geoMechData()->femPartResults()->assertResultsLoaded(this->resultAddress());
+        if (this->resultAddress().fieldName == "FracGrad")
+        {
+            RigFemResultAddress stressResAddr(RIG_INTEGRATION_POINT, std::string("ST"), "");
+            RigFemResultAddress porBarResAddr(RIG_ELEMENT_NODAL, std::string("POR-Bar"), "");
+            m_geomCase->geoMechData()->femPartResults()->assertResultsLoaded(stressResAddr);
+            m_geomCase->geoMechData()->femPartResults()->assertResultsLoaded(porBarResAddr);
+        }
+        else
+        {
+            m_geomCase->geoMechData()->femPartResults()->assertResultsLoaded(this->resultAddress());
+        }
     }
 }
 

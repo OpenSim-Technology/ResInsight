@@ -21,17 +21,20 @@
 
 #include "RigWellLogExtractor.h"
 
+#include "cafTensor3.h"
+
 #include "cvfBase.h"
 #include "cvfObject.h"
 #include "cvfMath.h"
+#include "cvfStructGrid.h"
 #include "cvfVector3.h"
 
 #include <vector>
-#include "cvfStructGrid.h"
 
-class RigWellPath;
-class RigGeoMechCaseData;
+enum RigElementType;
 class RigFemResultAddress;
+class RigGeoMechCaseData;
+class RigWellPath;
 
 namespace cvf {
     class BoundingBox;
@@ -46,14 +49,37 @@ public:
     RigGeoMechWellLogExtractor(RigGeoMechCaseData* aCase, const RigWellPath* wellpath, const std::string& wellCaseErrorMsgName);
 
     void                         curveData(const RigFemResultAddress& resAddr, int frameIndex, std::vector<double>* values );
+    void                         fractionGradient(const RigFemResultAddress& resAddr, int frameIndex, double rkbDiff, std::vector<double>* values);
     const RigGeoMechCaseData*    caseData()     { return m_caseData.p();}
 
 private:
+    class SigmaCalculator
+    {
+    public:
+        SigmaCalculator(const caf::Ten3f& tensor, float porePressure, float poissonRatio, int nThetaSubSamples);
+        float solveForPwBisection(float minPw, float maxPw) const;
+    private:
+        float minimumSigmaT(float wellPressure) const;
+        void calculateStressComponents();
+        cvf::Vec3f calculateStressComponentsForSegmentAngle(float theta);
+
+        caf::Ten3f m_tensor;
+        float m_porePressure;
+        float m_poissonRatio;
+        int m_nThetaSubSamples;
+        std::vector<cvf::Vec3f> m_stressComponents;
+    };
+
+    template<typename T>
+    T                            interpolatedResultValue(const RigFemResultAddress& resAddr, const std::vector<T>& resultValues, size_t cpIdx) const;
     void                         calculateIntersection();
     std::vector<size_t>          findCloseCells(const cvf::BoundingBox& bb);
     virtual cvf::Vec3d           calculateLengthInCell(size_t cellIndex, 
                                                        const cvf::Vec3d& startPoint, 
                                                        const cvf::Vec3d& endPoint) const override;
+    cvf::Vec3d                   calculateWellPathTangent(int64_t cpIdx) const;
+    static caf::Ten3f            transformTensorToWellPathOrientation(const cvf::Vec3d& wellPathTangent,
+                                                                      const caf::Ten3f& wellPathTensor);
 
     cvf::ref<RigGeoMechCaseData> m_caseData;
 };

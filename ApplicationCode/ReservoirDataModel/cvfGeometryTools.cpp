@@ -580,27 +580,13 @@ cvf::Vec4d GeometryTools::barycentricCoords(const cvf::Vec3d& v0,
     a[3] = triArea3D(v2, v3, v0)*triArea3D(p, v1, v2)*triArea3D(p, v0, v1);
 
     double sum_a = a[0] + a[1] + a[2] + a[3];
-
+    CVF_ASSERT(std::abs(sum_a) > 1.0e-8);
     w[0] = a[0]/sum_a;
     w[1] = a[1]/sum_a;
     w[2] = a[2]/sum_a;
     w[3] = a[3]/sum_a;
 
     return w;
-}
-
-//--------------------------------------------------------------------------------------------------
-/// 
-//--------------------------------------------------------------------------------------------------
-double GeometryTools::interpolateQuad(const cvf::Vec3d& v1, double s1, 
-                                      const cvf::Vec3d& v2, double s2, 
-                                      const cvf::Vec3d& v3, double s3, 
-                                      const cvf::Vec3d& v4, double s4, 
-                                      const cvf::Vec3d& point)
-{
-    cvf::Vec4d bc = barycentricCoords(v1, v2, v3, v4, point);
-
-    return s1*bc[0] + s2*bc[1] + s3*bc[2] + s4*bc[3];
 }
 
 //--------------------------------------------------------------------------------------------------

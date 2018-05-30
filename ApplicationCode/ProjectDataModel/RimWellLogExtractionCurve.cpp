@@ -389,7 +389,14 @@ void RimWellLogExtractionCurve::onLoadDataAndUpdate(bool updateParentPlot)
 
             m_geomResultDefinition->loadResult();
 
-            geomExtractor->curveData(m_geomResultDefinition->resultAddress(), m_timeStep, &values);
+            if (m_geomResultDefinition->resultAddress().fieldName == "FracGrad")
+            {
+                geomExtractor->fractionGradient(m_geomResultDefinition->resultAddress(), m_timeStep, rkbDiff(), &values);
+            }
+            else
+            {
+                geomExtractor->curveData(m_geomResultDefinition->resultAddress(), m_timeStep, &values);
+            }            
         }
 
         m_curveData = new RigWellLogCurveData;

@@ -219,15 +219,16 @@ void Rim3dWellLogExtractionCurve::curveValuesAndMdsAtTimeStep(std::vector<double
     }
     else if (geomExtractor.notNull())
     {
-        //*measuredDepthValues = geomExtractor->measuredDepth();
-
+        *measuredDepthValues = geomExtractor->measuredDepth();
         m_geomResultDefinition->loadResult();
-
-        //geomExtractor->curveData(m_geomResultDefinition->resultAddress(), timeStep, values);
-        *measuredDepthValues = wellPath->wellPathGeometry()->measureDepths();
-        const std::vector<cvf::Vec3d>& wellPathPoints = wellPath->wellPathGeometry()->wellPathPoints();
-
-        RigGeoMechWellPathPropertyCalculator::calculateFractionGradientAlongWellPath(dynamic_cast<RimGeoMechCase*>(m_case()), timeStep, this->rkbDiff(), wellPathPoints, values);
+        if (m_geomResultDefinition->resultAddress().fieldName == "FracGrad")
+        {
+            geomExtractor->fractionGradient(m_geomResultDefinition->resultAddress(), timeStep, rkbDiff(), values);
+        }
+        else
+        {
+            geomExtractor->curveData(m_geomResultDefinition->resultAddress(), timeStep, values);
+        }
     }
 }
 
