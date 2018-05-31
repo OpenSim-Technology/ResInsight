@@ -68,8 +68,8 @@ public:
     const RigFemPartNodes&      nodes() const                              {return m_nodes;}
 
     void                        assertNodeToElmIndicesIsCalculated();
-    const int*                  elementsUsingNode(int nodeIndex);
-    int                         numElementsUsingNode(int nodeIndex);
+    const std::vector<std::pair<int, int>>& elementsUsingNode(int nodeIndex) const;
+    int                         numElementsUsingNode(int nodeIndex) const;
     
     void                        assertElmNeighborsIsCalculated();
     int                         elementNeighbor(int elementIndex, int faceIndex) const
@@ -100,7 +100,7 @@ private:
     mutable cvf::ref<RigFemPartGrid>    m_structGrid;
 
     void calculateNodeToElmRefs();
-    std::vector<std::vector<int> > m_nodeToElmRefs; // Needs a more memory friendly structure
+    std::vector<std::vector<std::pair<int, int>>> m_nodeToElmRefs; // Needs a more memory friendly structure
   
     void calculateElmNeighbors();
     struct Neighbors { int indicesToNeighborElms[6]; char faceInNeighborElm[6];};

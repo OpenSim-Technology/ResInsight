@@ -32,6 +32,7 @@
 #include <vector>
 
 enum RigElementType;
+enum RigFemResultPosEnum;
 class RigFemResultAddress;
 class RigGeoMechCaseData;
 class RigWellPath;
@@ -49,7 +50,7 @@ public:
     RigGeoMechWellLogExtractor(RigGeoMechCaseData* aCase, const RigWellPath* wellpath, const std::string& wellCaseErrorMsgName);
 
     void                         curveData(const RigFemResultAddress& resAddr, int frameIndex, std::vector<double>* values );
-    void                         fractionGradient(const RigFemResultAddress& resAddr, int frameIndex, double rkbDiff, std::vector<double>* values);
+    void                         fractureGradient(const RigFemResultAddress& resAddr, int frameIndex, double rkbDiff, std::vector<double>* values);
     const RigGeoMechCaseData*    caseData()     { return m_caseData.p();}
 
 private:
@@ -57,21 +58,30 @@ private:
     {
     public:
         SigmaCalculator(const caf::Ten3f& tensor, float porePressure, float poissonRatio, int nThetaSubSamples);
-        float solveForPwBisection(float minPw, float maxPw) const;
+        void solveForPwBisection(float minPw, float maxPw);
+        cvf::Vec3f principalStressesPlusPorePressure() const;
     private:
-        float minimumSigmaT(float wellPressure) const;
+        std::pair<float, float> sigmaTMinMax() const;
+        float sigmaTMinOfMin(float wellPressure, float* thetaAtMin) const;
         void calculateStressComponents();
-        cvf::Vec3f calculateStressComponentsForSegmentAngle(float theta);
+        cvf::Vec4f calculateStressComponentsForSegmentAngle(float theta) const;
 
         caf::Ten3f m_tensor;
         float m_porePressure;
         float m_poissonRatio;
         int m_nThetaSubSamples;
-        std::vector<cvf::Vec3f> m_stressComponents;
+        std::vector<cvf::Vec4f> m_stressComponents;
+
+        float m_wellPressureFractureGradient;
+        float m_thetaPrincipleStress;
     };
 
+    cvf::Vec3f calculatePrincipalStressesPlusPorePressure(RigFemResultPosEnum            resultPosType,
+                                                          const std::vector<caf::Ten3f>& vertexStresses,
+                                                          const std::vector<float>&      porePressures,
+                                                          int64_t                        cpIdx) const;
     template<typename T>
-    T                            interpolatedResultValue(const RigFemResultAddress& resAddr, const std::vector<T>& resultValues, size_t cpIdx) const;
+    T                            interpolatedResultValue(RigFemResultPosEnum resultPosType, const std::vector<T>& resultValues, int64_t cpIdx) const;
     void                         calculateIntersection();
     std::vector<size_t>          findCloseCells(const cvf::BoundingBox& bb);
     virtual cvf::Vec3d           calculateLengthInCell(size_t cellIndex, 

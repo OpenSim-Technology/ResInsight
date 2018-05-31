@@ -26,7 +26,6 @@
 #include "RigGeoMechCaseData.h"
 #include "RigEclipseWellLogExtractor.h"
 #include "RigGeoMechWellLogExtractor.h"
-#include "RigGeoMechWellPathPropertyCalculator.h"
 #include "RigResultAccessorFactory.h"
 #include "RigCaseCellResultsData.h"
 #include "RigFemPartResultsCollection.h"
@@ -223,7 +222,7 @@ void Rim3dWellLogExtractionCurve::curveValuesAndMdsAtTimeStep(std::vector<double
         m_geomResultDefinition->loadResult();
         if (m_geomResultDefinition->resultAddress().fieldName == "FracGrad")
         {
-            geomExtractor->fractionGradient(m_geomResultDefinition->resultAddress(), timeStep, rkbDiff(), values);
+            geomExtractor->fractureGradient(m_geomResultDefinition->resultAddress(), timeStep, rkbDiff(), values);
         }
         else
         {

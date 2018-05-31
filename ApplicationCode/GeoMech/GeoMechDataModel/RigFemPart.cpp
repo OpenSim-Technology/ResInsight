@@ -105,7 +105,7 @@ void RigFemPart::calculateNodeToElmRefs()
         const int* elmNodes = connectivities(eIdx);
         for (int enIdx = 0; enIdx < elmNodeCount; ++enIdx)
         {
-            m_nodeToElmRefs[elmNodes[enIdx]].push_back(eIdx);
+            m_nodeToElmRefs[elmNodes[enIdx]].push_back(std::make_pair(eIdx, enIdx));
         }
     }
 }
@@ -113,15 +113,15 @@ void RigFemPart::calculateNodeToElmRefs()
 //--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
-const int* RigFemPart::elementsUsingNode(int nodeIndex)
+const std::vector<std::pair<int, int>>& RigFemPart::elementsUsingNode(int nodeIndex) const
 {
-   return &(m_nodeToElmRefs[nodeIndex][0]);
+   return m_nodeToElmRefs[nodeIndex];
 }
 
 //--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
-int RigFemPart::numElementsUsingNode(int nodeIndex)
+int RigFemPart::numElementsUsingNode(int nodeIndex) const
 {
     return static_cast<int>(m_nodeToElmRefs[nodeIndex].size());
 }
@@ -168,16 +168,15 @@ void RigFemPart::calculateElmNeighbors()
             candidates.clear();
             {
                 int firstNodeIdxOfFace = elmNodes[localFaceIndices[0]];
-                int candidateCount1 = this->numElementsUsingNode(firstNodeIdxOfFace);
-                const int* candidates1 = this->elementsUsingNode(firstNodeIdxOfFace);
+                const std::vector<std::pair<int, int>> candidates1 = this->elementsUsingNode(firstNodeIdxOfFace);
 
-                if (candidateCount1)
+                if (!candidates1.empty())
                 {
                     // Get neighbor candidates from the diagonal node
 
                     int thirdNodeIdxOfFace = elmNodes[localFaceIndices[3]];
-                    int candidateCount2 = this->numElementsUsingNode(thirdNodeIdxOfFace);
-                    const int* candidates2 = this->elementsUsingNode(thirdNodeIdxOfFace);
+                    
+                    const std::vector<std::pair<int, int>> candidates2 = this->elementsUsingNode(thirdNodeIdxOfFace);
 
                     // The candidates are sorted from smallest to largest, so we do a linear search to find the 
                     // (two) common cells in the two arrays, and leaving this element out, we have one candidate left
@@ -185,15 +184,15 @@ void RigFemPart::calculateElmNeighbors()
                     int idx1 = 0;
                     int idx2 = 0;
 
-                    while (idx1 < candidateCount1 && idx2 < candidateCount2)
+                    while (idx1 < candidates1.size() && idx2 < candidates2.size())
                     {
-                        if (candidates1[idx1] < candidates2[idx2]){ ++idx1; continue; }
-                        if (candidates1[idx1] > candidates2[idx2]){ ++idx2; continue; }
-                        if (candidates1[idx1] == candidates2[idx2])
+                        if (candidates1[idx1].first < candidates2[idx2].first){ ++idx1; continue; }
+                        if (candidates1[idx1].first > candidates2[idx2].first){ ++idx2; continue; }
+                        if (candidates1[idx1].first == candidates2[idx2].first)
                         {
-                            if (candidates1[idx1] != eIdx)
+                            if (candidates1[idx1].first != eIdx)
                             {
-                                candidates.push_back(candidates1[idx1]);
+                                candidates.push_back(candidates1[idx1].first);
                             }
                             ++idx1; ++idx2;
                         }
