@@ -62,7 +62,7 @@ RigGeoMechWellLogExtractor::BoreHoleStressCalculator::BoreHoleStressCalculator(c
 float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveFractureGradient(float minPw, float maxPw, float* thetaOut)
 {
     MemberFunc fn = &RigGeoMechWellLogExtractor::BoreHoleStressCalculator::sigmaTMinOfMin;
-    return solveBisection(minPw, maxPw, fn, thetaOut);
+    return solveSecant(fn, thetaOut);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -71,7 +71,7 @@ float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveFractureGradien
 float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveStassiDalia(float minPw, float maxPw, float* thetaOut)
 {
     MemberFunc fn = &RigGeoMechWellLogExtractor::BoreHoleStressCalculator::stassiDalia;
-    return solveBisection(minPw, maxPw, fn, thetaOut);
+    return solveSecant(fn, thetaOut);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -94,7 +94,7 @@ cvf::Vec3f RigGeoMechWellLogExtractor::BoreHoleStressCalculator::principleStress
 //--------------------------------------------------------------------------------------------------
 float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveBisection(float minPw, float maxPw, MemberFunc fn, float* thetaOut)
 {
-    const int N = 10000;
+    const int N = 50;
     const float epsilon = 1.0e-6f;
 
     float theta = 0.0;
@@ -102,21 +102,10 @@ float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveBisection(float
     float minPwFuncVal = std::invoke(fn, this, minPw, &theta);
     float maxPwFuncVal = std::invoke(fn, this, maxPw, &theta);
     float range = maxPw - minPw;
-    // Fallback to expand range in case the root is not within the original range
-    for (int i = 0; i < 10 && minPwFuncVal * maxPwFuncVal > 0.0; ++i)
-    {
-        minPw -= range;
-        maxPw += range;
-        range = maxPw - minPw;
-        minPwFuncVal = std::invoke(fn, this, minPw, &theta);
-        maxPwFuncVal = std::invoke(fn, this, maxPw, &theta);
-    }
-
-    CVF_ASSERT(minPwFuncVal * maxPwFuncVal < 0.0);
-
+    
     // Bi-section root finding method: https://en.wikipedia.org/wiki/Bisection_method
     int i = 0;
-    for (; i <= N && range > maxPw * epsilon; ++i)
+    for (; i <= N && range > m_porePressure * epsilon; ++i)
     {
         float midPw = (minPw + maxPw) * 0.5;
         float midPwFuncVal = std::invoke(fn, this, midPw, &theta);
@@ -141,6 +130,118 @@ float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveBisection(float
     }
 
     return minPw - minPwFuncVal * (maxPw - minPw) / (maxPwFuncVal - minPwFuncVal);
+}
+
+//--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveRegularFalsi(MemberFunc fn, float* thetaOut)
+{
+    const int N = 100;
+    const float epsilon = 1.0e-6f;
+
+    float theta = 0.0;
+
+    float xl = 0.0;
+    float xr = m_porePressure;
+
+    float f_xl = std::invoke(fn, this, xl, &theta);
+    float f_xr = std::invoke(fn, this, xr, &theta);
+
+    float xm = xm = (xl * f_xr - xr * f_xl) / (f_xr - f_xl);
+    float f_xm = std::invoke(fn, this, xm, &theta);
+
+    if (f_xr * f_xl > 0.0) // Original interval was bad
+    {
+        if (f_xm * f_xl < 0.0)
+        {
+            xr = xm;
+            f_xr = f_xm;
+        }
+        else if (f_xm * f_xr < 0.0)
+        {
+            xl = xm;
+            f_xl = f_xm;
+        }
+        else
+        {
+            CVF_ASSERT(false); // Bad interval
+        }
+    }
+
+
+    // Regular Falsi root finding method: https://en.wikipedia.org/wiki/False_position_method
+    int i = 0;
+    int side = 0;
+    for (; i <= N; ++i)
+    {
+        xm = (xl * f_xr - xr * f_xl) / (f_xr - f_xl);
+        if (std::abs(xr - xl) < epsilon * std::abs(xr + xl)) break;
+        float f_xm = std::invoke(fn, this, xm, &theta);
+
+        if (f_xm * f_xr > 0.0)
+        {
+            xr = xm;
+            f_xr = f_xm;
+            if (side == -1) f_xl /= 2;
+            side = -1;
+        }
+        else if (f_xm * f_xl > 0.0)
+        {
+            xl = xm;
+            f_xl = f_xm;
+            if (side == 1) f_xr /= 2;
+            side = 1;
+        }
+        else {
+            break;
+        }
+    }
+    CVF_ASSERT(i < N); // Otherwise it hasn't converged
+                       // Return linear solution between minPw and maxPw.
+
+    if (thetaOut)
+    {
+        *thetaOut = theta;
+    }
+
+    return xr;
+}
+
+//--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveSecant(MemberFunc fn, float* thetaOut)
+{
+    const float epsilon = 1.0e-8f;
+    const int N = 200;
+    float theta = 0.0;
+
+    float x_0 = 0.0;    
+    float f_x0 = std::invoke(fn, this, x_0, &theta);
+    float x_1 = m_porePressure;
+    float f_x1 = std::invoke(fn, this, x_1, &theta);
+    float x = 0.0;
+    int i = 0;
+    for (; i < N && std::abs(f_x1 - f_x0) > m_porePressure * epsilon; ++i)
+    {
+        x = x_1 - f_x1 * (x_1 - x_0) / (f_x1 - f_x0);
+        float f_x = std::invoke(fn, this, x, &theta);
+
+        // Update iteration variables
+        x_0 = x_1;
+        f_x0 = f_x1;
+        x_1 = x;
+        f_x1 = f_x;        
+    }
+    CVF_ASSERT(i < N); // Otherwise it hasn't converged
+                       // Return linear solution between minPw and maxPw.
+
+    if (thetaOut)
+    {
+        *thetaOut = theta;
+    }
+    return x;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -304,7 +405,7 @@ void RigGeoMechWellLogExtractor::fractureGradient(const RigFemResultAddress& res
 
     std::vector<float> porePressures = resultCollection->resultValues(porBarResAddr, 0, frameIndex);
 
-#pragma omp parallel for
+//#pragma omp parallel for
     for (int64_t cpIdx = 0; cpIdx < (int64_t) m_intersections.size(); ++cpIdx)
     {        
         size_t elmIdx = m_intersectedCellsGlobIdx[cpIdx];
@@ -334,11 +435,11 @@ void RigGeoMechWellLogExtractor::fractureGradient(const RigFemResultAddress& res
         float wellPressure = 0.0;
         if (fracGrad)
         {
-            wellPressure = sigmaCalculator.solveFractureGradient(0.0, 2 * porePressure);
+            wellPressure = sigmaCalculator.solveFractureGradient(0.0, 3 * porePressure);
         }
         else
         {
-            wellPressure = sigmaCalculator.solveStassiDalia(0.0, 2 * porePressure);
+            wellPressure = sigmaCalculator.solveStassiDalia(0.0, 3 * porePressure);
         }
 
         (*values)[cpIdx] = wellPressure / ((-m_intersections[cpIdx].z() + rkbDiff) * 9.81 / 100.0f);
