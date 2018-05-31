@@ -326,6 +326,9 @@ std::map<std::string, std::vector<std::string> > RigFemPartResultsCollection::sc
         {
             fieldCompNames = m_readerInterface->scalarElementNodeFieldAndComponentNames();
 
+            fieldCompNames["FracGrad"];
+            fieldCompNames["StassidAlia"];
+
             fieldCompNames["SE"].push_back("SEM");
             fieldCompNames["SE"].push_back("SFI");
             fieldCompNames["SE"].push_back("DSM");
@@ -393,6 +396,7 @@ std::map<std::string, std::vector<std::string> > RigFemPartResultsCollection::sc
             fieldCompNames = m_readerInterface->scalarIntegrationPointFieldAndComponentNames();
            
             fieldCompNames["FracGrad"];
+            fieldCompNames["StassidAlia"];
 
             fieldCompNames["SE"].push_back("SEM");
             fieldCompNames["SE"].push_back("SFI");

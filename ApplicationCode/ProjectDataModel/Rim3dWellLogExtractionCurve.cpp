@@ -220,7 +220,7 @@ void Rim3dWellLogExtractionCurve::curveValuesAndMdsAtTimeStep(std::vector<double
     {
         *measuredDepthValues = geomExtractor->measuredDepth();
         m_geomResultDefinition->loadResult();
-        if (m_geomResultDefinition->resultAddress().fieldName == "FracGrad")
+        if (m_geomResultDefinition->resultAddress().fieldName == "FracGrad" || m_geomResultDefinition->resultAddress().fieldName == "StassidAlia")
         {
             geomExtractor->fractureGradient(m_geomResultDefinition->resultAddress(), timeStep, rkbDiff(), values);
         }

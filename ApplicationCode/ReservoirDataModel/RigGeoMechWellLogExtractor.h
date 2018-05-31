@@ -54,32 +54,29 @@ public:
     const RigGeoMechCaseData*    caseData()     { return m_caseData.p();}
 
 private:
-    class SigmaCalculator
+    class BoreHoleStressCalculator
     {
     public:
-        SigmaCalculator(const caf::Ten3f& tensor, float porePressure, float poissonRatio, int nThetaSubSamples);
-        void solveForPwBisection(float minPw, float maxPw);
-        cvf::Vec3f principalStressesPlusPorePressure() const;
+        BoreHoleStressCalculator(const caf::Ten3f& tensor, float porePressure, float poissonRatio, float uniaxialCompressiveStrength, int nThetaSubSamples);
+        float solveFractureGradient(float minPw, float maxPw, float* thetaOut = nullptr);
+        float solveStassiDalia(float minPw, float maxPw, float* thetaOut = nullptr);
+        cvf::Vec3f principleStressesAtWall(float pw, float theta) const;
     private:
-        std::pair<float, float> sigmaTMinMax() const;
+        typedef float (BoreHoleStressCalculator::*MemberFunc)(float pw, float* thetaOut) const;
+        float solveBisection(float minPw, float maxPw, MemberFunc fn, float* thetaOut);
         float sigmaTMinOfMin(float wellPressure, float* thetaAtMin) const;
+        float stassiDalia(float wellPressure, float* thetaAtMin) const;
         void calculateStressComponents();
         cvf::Vec4f calculateStressComponentsForSegmentAngle(float theta) const;
 
         caf::Ten3f m_tensor;
         float m_porePressure;
         float m_poissonRatio;
+        float m_uniaxialCompressiveStrength;
         int m_nThetaSubSamples;
         std::vector<cvf::Vec4f> m_stressComponents;
-
-        float m_wellPressureFractureGradient;
-        float m_thetaPrincipleStress;
     };
-
-    cvf::Vec3f calculatePrincipalStressesPlusPorePressure(RigFemResultPosEnum            resultPosType,
-                                                          const std::vector<caf::Ten3f>& vertexStresses,
-                                                          const std::vector<float>&      porePressures,
-                                                          int64_t                        cpIdx) const;
+   
     template<typename T>
     T                            interpolatedResultValue(RigFemResultPosEnum resultPosType, const std::vector<T>& resultValues, int64_t cpIdx) const;
     void                         calculateIntersection();

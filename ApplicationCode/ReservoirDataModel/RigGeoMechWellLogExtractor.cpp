@@ -41,10 +41,15 @@
 //--------------------------------------------------------------------------------------------------
 ///
 //--------------------------------------------------------------------------------------------------
-RigGeoMechWellLogExtractor::SigmaCalculator::SigmaCalculator(const caf::Ten3f& tensor, float porePressure, float poissonRatio, int nThetaSubSamples)
+RigGeoMechWellLogExtractor::BoreHoleStressCalculator::BoreHoleStressCalculator(const caf::Ten3f& tensor,
+                                                             float             porePressure,
+                                                             float             poissonRatio,
+                                                             float             uniaxialCompressiveStrength,
+                                                             int               nThetaSubSamples)
     : m_tensor(tensor)
     , m_porePressure(porePressure)
     , m_poissonRatio(poissonRatio)
+    , m_uniaxialCompressiveStrength(uniaxialCompressiveStrength)
     , m_nThetaSubSamples(nThetaSubSamples)
 {
     calculateStressComponents();
@@ -54,100 +59,145 @@ RigGeoMechWellLogExtractor::SigmaCalculator::SigmaCalculator(const caf::Ten3f& t
 //--------------------------------------------------------------------------------------------------
 /// Simple bisection method for now
 //--------------------------------------------------------------------------------------------------
-void RigGeoMechWellLogExtractor::SigmaCalculator::solveForPwBisection(float minPw, float maxPw)
+float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveFractureGradient(float minPw, float maxPw, float* thetaOut)
+{
+    MemberFunc fn = &RigGeoMechWellLogExtractor::BoreHoleStressCalculator::sigmaTMinOfMin;
+    return solveBisection(minPw, maxPw, fn, thetaOut);
+}
+
+//--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveStassiDalia(float minPw, float maxPw, float* thetaOut)
+{
+    MemberFunc fn = &RigGeoMechWellLogExtractor::BoreHoleStressCalculator::stassiDalia;
+    return solveBisection(minPw, maxPw, fn, thetaOut);
+}
+
+//--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+cvf::Vec3f RigGeoMechWellLogExtractor::BoreHoleStressCalculator::principleStressesAtWall(float pw, float theta) const
+{
+    cvf::Vec4f stressComponentsForAngle = calculateStressComponentsForSegmentAngle(theta);
+    float sigma_theta = stressComponentsForAngle[1] - pw;
+    const float& sigma_z = stressComponentsForAngle[2];
+    float tauSqrx4 = std::pow(stressComponentsForAngle[3], 2) * 4.0;
+
+    float sigmaComponent1 = sigma_z + sigma_theta;
+    float sigmaComponent2 = std::sqrt(std::pow(sigma_z - sigma_theta, 2) + tauSqrx4);    
+    return cvf::Vec3f(pw - m_porePressure, 0.5 * (sigmaComponent1 + sigmaComponent2) - m_porePressure, 0.5 * (sigmaComponent1 - sigmaComponent2) - m_porePressure);
+}
+
+//--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveBisection(float minPw, float maxPw, MemberFunc fn, float* thetaOut)
 {
     const int N = 10000;
     const float epsilon = 1.0e-6f;
 
-    float minPwSigma = sigmaTMinOfMin(minPw, &m_thetaPrincipleStress);
-    float maxPwSigma = sigmaTMinOfMin(maxPw, &m_thetaPrincipleStress);
+    float theta = 0.0;
+
+    float minPwFuncVal = std::invoke(fn, this, minPw, &theta);
+    float maxPwFuncVal = std::invoke(fn, this, maxPw, &theta);
     float range = maxPw - minPw;
     // Fallback to expand range in case the root is not within the original range
-    for (int i = 0; i < 10 && minPwSigma * maxPwSigma > 0.0; ++i)
+    for (int i = 0; i < 10 && minPwFuncVal * maxPwFuncVal > 0.0; ++i)
     {
         minPw -= range;
         maxPw += range;
         range = maxPw - minPw;
-        minPwSigma = sigmaTMinOfMin(minPw, &m_thetaPrincipleStress);
-        maxPwSigma = sigmaTMinOfMin(maxPw, &m_thetaPrincipleStress);
+        minPwFuncVal = std::invoke(fn, this, minPw, &theta);
+        maxPwFuncVal = std::invoke(fn, this, maxPw, &theta);
     }
 
-    CVF_ASSERT(minPwSigma * maxPwSigma < 0.0);
+    CVF_ASSERT(minPwFuncVal * maxPwFuncVal < 0.0);
 
     // Bi-section root finding method: https://en.wikipedia.org/wiki/Bisection_method
     int i = 0;
     for (; i <= N && range > maxPw * epsilon; ++i)
     {
         float midPw = (minPw + maxPw) * 0.5;
-        float midPwSigma = sigmaTMinOfMin(midPw, &m_thetaPrincipleStress);
-        if (midPwSigma * minPwSigma < 0.0)
+        float midPwFuncVal = std::invoke(fn, this, midPw, &theta);
+        if (midPwFuncVal * minPwFuncVal < 0.0)
         {
             maxPw = midPw;
-            maxPwSigma = midPwSigma;
+            maxPwFuncVal = midPwFuncVal;
         }
         else
         {
             minPw = midPw;
-            minPwSigma = midPwSigma;
+            minPwFuncVal = midPwFuncVal;
         }
         range = maxPw - minPw;
     }
     CVF_ASSERT(i < N); // Otherwise it hasn't converged
-    m_wellPressureFractureGradient = 0.5 * (minPw + maxPw);
+                       // Return linear solution between minPw and maxPw.
+
+    if (thetaOut)
+    {
+        *thetaOut = theta;
+    }
+
+    return minPw - minPwFuncVal * (maxPw - minPw) / (maxPwFuncVal - minPwFuncVal);
 }
 
 //--------------------------------------------------------------------------------------------------
 ///
 //--------------------------------------------------------------------------------------------------
-cvf::Vec3f RigGeoMechWellLogExtractor::SigmaCalculator::principalStressesPlusPorePressure() const
-{
-    std::pair<float, float> sigmas = sigmaTMinMax();
-
-    return cvf::Vec3f(m_wellPressureFractureGradient, sigmas.first, sigmas.second);
-}
-
-//--------------------------------------------------------------------------------------------------
-///
-//--------------------------------------------------------------------------------------------------
-std::pair<float, float> RigGeoMechWellLogExtractor::SigmaCalculator::sigmaTMinMax() const
-{
-    cvf::Vec4f stressComponentsForAngle = this->calculateStressComponentsForSegmentAngle(m_thetaPrincipleStress);
-    float sigma_theta = stressComponentsForAngle[1] - m_wellPressureFractureGradient;
-    const float& sigma_z = stressComponentsForAngle[2];
-    float tauSqrx4 = std::pow(stressComponentsForAngle[3], 2) * 4.0;
-    float sigma_t1 = sigma_z + sigma_theta;
-    float sigma_t2 = std::sqrt(std::pow(sigma_z - sigma_theta, 2) + tauSqrx4);
-    float sigma_t_min = 0.5 * (sigma_t1 - sigma_t2);
-    float sigma_t_max = 0.5 * (sigma_t1 + sigma_t2);
-    return std::make_pair(sigma_t_min, sigma_t_max);
-}
-
-//--------------------------------------------------------------------------------------------------
-///
-//--------------------------------------------------------------------------------------------------
-float RigGeoMechWellLogExtractor::SigmaCalculator::sigmaTMinOfMin(float wellPressure, float* thetaAtMin) const
+float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::sigmaTMinOfMin(float wellPressure, float* thetaAtMin) const
 {
     CVF_ASSERT(thetaAtMin);
-    float minSigma = std::numeric_limits<float>::max();
+    float sigma_t_min_min = std::numeric_limits<float>::max();
     for (const cvf::Vec4f& stressComponentsForAngle : m_stressComponents)
     {
         float sigma_theta = stressComponentsForAngle[1] - wellPressure;
         const float& sigma_z = stressComponentsForAngle[2];
         float tauSqrx4 = std::pow(stressComponentsForAngle[3], 2) * 4.0;
-        float sigma_t = 0.5 * ((sigma_z + sigma_theta) - std::sqrt(std::pow(sigma_z - sigma_theta, 2) + tauSqrx4));
-        if (sigma_t < minSigma)
+        float sigma_t_min = 0.5 * ((sigma_z + sigma_theta) - std::sqrt(std::pow(sigma_z - sigma_theta, 2) + tauSqrx4));
+        if (sigma_t_min < sigma_t_min_min)
         {
-            minSigma = sigma_t;
+            sigma_t_min_min = sigma_t_min;
             *thetaAtMin = stressComponentsForAngle[0];
         }
     }
-    return minSigma - m_porePressure;
+    return sigma_t_min_min - m_porePressure;
 }
 
 //--------------------------------------------------------------------------------------------------
 ///
 //--------------------------------------------------------------------------------------------------
-void RigGeoMechWellLogExtractor::SigmaCalculator::calculateStressComponents()
+float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::stassiDalia(float wellPressure, float* thetaAtMin) const
+{
+    CVF_ASSERT(thetaAtMin);
+    float minStassiDalia = std::numeric_limits<float>::max();
+    for (const cvf::Vec4f& stressComponentsForAngle : m_stressComponents)
+    {
+        float sigma_theta = stressComponentsForAngle[1] - wellPressure;
+        const float& sigma_z = stressComponentsForAngle[2];
+        float tauSqrx4 = std::pow(stressComponentsForAngle[3], 2) * 4.0;
+
+        float sigma_1 = wellPressure - m_porePressure;
+        float sigma_2 = 0.5 * ((sigma_z + sigma_theta) + std::sqrt(std::pow(sigma_z - sigma_theta, 2) + tauSqrx4)) - m_porePressure;
+        float sigma_3 = 0.5 * ((sigma_z + sigma_theta) - std::sqrt(std::pow(sigma_z - sigma_theta, 2) + tauSqrx4)) - m_porePressure;
+
+        float stassiDalia = std::pow(sigma_1 - sigma_2, 2) + std::pow(sigma_2 - sigma_3, 2) + std::pow(sigma_1 - sigma_3, 2)
+                          - 2 * m_uniaxialCompressiveStrength * (sigma_1 + sigma_2 + sigma_3);
+
+        if (stassiDalia < minStassiDalia)
+        {
+            minStassiDalia = stassiDalia;
+            *thetaAtMin = stressComponentsForAngle[0];
+        }
+    }
+    return minStassiDalia;
+}
+
+//--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+void RigGeoMechWellLogExtractor::BoreHoleStressCalculator::calculateStressComponents()
 {
     m_stressComponents.reserve(m_nThetaSubSamples);
 
@@ -162,7 +212,7 @@ void RigGeoMechWellLogExtractor::SigmaCalculator::calculateStressComponents()
 //--------------------------------------------------------------------------------------------------
 ///
 //--------------------------------------------------------------------------------------------------
-cvf::Vec4f RigGeoMechWellLogExtractor::SigmaCalculator::calculateStressComponentsForSegmentAngle(float theta) const
+cvf::Vec4f RigGeoMechWellLogExtractor::BoreHoleStressCalculator::calculateStressComponentsForSegmentAngle(float theta) const
 {
     cvf::Vec4f stressComponents;
 
@@ -231,14 +281,18 @@ void RigGeoMechWellLogExtractor::curveData(const RigFemResultAddress& resAddr, i
 //--------------------------------------------------------------------------------------------------
 void RigGeoMechWellLogExtractor::fractureGradient(const RigFemResultAddress& resAddr, int frameIndex, double rkbDiff, std::vector<double>* values)
 {
-    CVF_TIGHT_ASSERT(values);
-    CVF_ASSERT(resAddr.fieldName == "FracGrad");
+    const float poissonRatio = 0.25f; // TODO: Read this in
+    const float uniaxialStrengthInBars = 20.0f; // TODO: Read this in
 
+    CVF_TIGHT_ASSERT(values);
+    CVF_ASSERT(resAddr.fieldName == "FracGrad" || resAddr.fieldName == "StassidAlia");
+
+    bool fracGrad = resAddr.fieldName == "FracGrad";
     const RigFemPart* femPart = m_caseData->femParts()->part(0);
     const std::vector<cvf::Vec3f>& nodeCoords = femPart->nodes().coordinates;
     RigFemPartResultsCollection* resultCollection = m_caseData->femPartResults();
 
-    RigFemResultAddress stressResAddr(RIG_ELEMENT_NODAL, std::string("ST"), "");
+    RigFemResultAddress stressResAddr(resAddr.resultPosType, std::string("ST"), "");
     stressResAddr.fieldName = std::string("ST");
 
     RigFemResultAddress porBarResAddr(RIG_ELEMENT_NODAL, std::string("POR-Bar"), "");
@@ -258,43 +312,37 @@ void RigGeoMechWellLogExtractor::fractureGradient(const RigFemResultAddress& res
 
         if (!(elmType == HEX8 || elmType == HEX8P)) continue;
 
-        cvf::Vec3f principalStressesPlusPorePressure = calculatePrincipalStressesPlusPorePressure(stressResAddr.resultPosType, vertexStresses, porePressures, cpIdx);
-        (*values)[cpIdx] = principalStressesPlusPorePressure[0] / ((-m_intersections[cpIdx].z() + rkbDiff) * 9.81 / 100.0f);
-    }
-}
 
-
-
-//--------------------------------------------------------------------------------------------------
-///
-//--------------------------------------------------------------------------------------------------
-cvf::Vec3f RigGeoMechWellLogExtractor::calculatePrincipalStressesPlusPorePressure(RigFemResultPosEnum            resultPosType,
-                                                                                  const std::vector<caf::Ten3f>& vertexStresses,
-                                                                                  const std::vector<float>&      porePressures,
-                                                                                  int64_t                        cpIdx) const
-{
-    const float poissonRatio = 0.25f; // TODO: Read this in some way
-    caf::Ten3f interpolatedStress = interpolatedResultValue(resultPosType, vertexStresses, cpIdx);
-
-    double trueVerticalDepth = -m_intersections[cpIdx].z();
-    float porePressure = trueVerticalDepth * 9.81 / 100.0;
-    if (!porePressures.empty())
-    {
-        float interpolatedPorePressure = interpolatedResultValue(resultPosType, porePressures, cpIdx);
-        if (interpolatedPorePressure != std::numeric_limits<float>::infinity() &&
-            interpolatedPorePressure != -std::numeric_limits<float>::infinity())
+        double trueVerticalDepth = -m_intersections[cpIdx].z();
+        float porePressure = trueVerticalDepth * 9.81 / 100.0;
+        if (!porePressures.empty())
         {
-            porePressure = interpolatedPorePressure;
+            float interpolatedPorePressure = interpolatedResultValue(porBarResAddr.resultPosType, porePressures, cpIdx);
+            if (interpolatedPorePressure != std::numeric_limits<float>::infinity() &&
+                interpolatedPorePressure != -std::numeric_limits<float>::infinity())
+            {
+                porePressure = interpolatedPorePressure;
+            }
         }
+
+        caf::Ten3f interpolatedStress = interpolatedResultValue(stressResAddr.resultPosType, vertexStresses, cpIdx);
+
+        cvf::Vec3d wellPathTangent = calculateWellPathTangent(cpIdx);
+        caf::Ten3f wellPathOrientedStress = transformTensorToWellPathOrientation(wellPathTangent, interpolatedStress);
+
+        BoreHoleStressCalculator sigmaCalculator(wellPathOrientedStress, porePressure, poissonRatio, uniaxialStrengthInBars, 16);
+        float wellPressure = 0.0;
+        if (fracGrad)
+        {
+            wellPressure = sigmaCalculator.solveFractureGradient(0.0, 2 * porePressure);
+        }
+        else
+        {
+            wellPressure = sigmaCalculator.solveStassiDalia(0.0, 2 * porePressure);
+        }
+
+        (*values)[cpIdx] = wellPressure / ((-m_intersections[cpIdx].z() + rkbDiff) * 9.81 / 100.0f);
     }
-
-    cvf::Vec3d wellPathTangent = calculateWellPathTangent(cpIdx);
-    caf::Ten3f wellPathOrientedStress = transformTensorToWellPathOrientation(wellPathTangent, interpolatedStress);
-
-    SigmaCalculator sigmaCalculator(wellPathOrientedStress, porePressure, poissonRatio, 16);
-    sigmaCalculator.solveForPwBisection(0.0, 2 * porePressure);
-
-    return sigmaCalculator.principalStressesPlusPorePressure();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -359,7 +407,7 @@ T RigGeoMechWellLogExtractor::interpolatedResultValue(RigFemResultPosEnum result
 
     std::vector<T> nodeResultValues;
     nodeResultValues.reserve(4);
-    if (resultPosType == RIG_ELEMENT_NODAL)
+    if (resultPosType == RIG_ELEMENT_NODAL || resultPosType == RIG_INTEGRATION_POINT)
     {
         for (size_t i = 0; i < nodeResIdx.size(); ++i)
         {
