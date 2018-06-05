@@ -314,8 +314,8 @@ void RigGeoMechWellLogExtractor::curveData(const RigFemResultAddress& resAddr, i
 //--------------------------------------------------------------------------------------------------
 void RigGeoMechWellLogExtractor::fractureGradient(const RigFemResultAddress& resAddr, int frameIndex, double rkbDiff, std::vector<double>* values)
 {
-    const float poissonRatio = 0.25f; // TODO: Read this in
-    const float uniaxialStrengthInBars = 20.0f; // TODO: Read this in
+    const float poissonRatio = 0.25f; // TODO: Read this in.
+    const float uniaxialStrengthInBars = 20.0f; // TODO: Read this in.
 
     CVF_TIGHT_ASSERT(values);
     CVF_ASSERT(resAddr.fieldName == "FracGrad" || resAddr.fieldName == "StassidAlia");
@@ -337,7 +337,7 @@ void RigGeoMechWellLogExtractor::fractureGradient(const RigFemResultAddress& res
 
     std::vector<float> porePressures = resultCollection->resultValues(porBarResAddr, 0, frameIndex);
 
-//#pragma omp parallel for
+#pragma omp parallel for
     for (int64_t cpIdx = 0; cpIdx < (int64_t) m_intersections.size(); ++cpIdx)
     {        
         size_t elmIdx = m_intersectedCellsGlobIdx[cpIdx];
@@ -442,6 +442,7 @@ T RigGeoMechWellLogExtractor::interpolatedResultValue(RigFemResultPosEnum result
     nodeResultValues.reserve(4);
     if (resultPosType == RIG_ELEMENT_NODAL || resultPosType == RIG_INTEGRATION_POINT)
     {
+        // Estimate nodal values as the average of the node values from each connected element.
         for (size_t i = 0; i < nodeResIdx.size(); ++i)
         {
             int nodeIndex = femPart->nodeIdxFromElementNodeResultIdx(nodeResIdx[i]);
