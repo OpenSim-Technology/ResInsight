@@ -64,7 +64,6 @@ private:
     private:
         typedef float (BoreHoleStressCalculator::*MemberFunc)(float pw, float* thetaOut) const;
         float solveBisection(float minPw, float maxPw, MemberFunc fn, float* thetaOut);
-        float solveRegularFalsi(MemberFunc fn, float* thetaOut);
         float solveSecant(MemberFunc fn, float* thetaOut);
         float sigmaTMinOfMin(float wellPressure, float* thetaAtMin) const;
         float stassiDalia(float wellPressure, float* thetaAtMin) const;

@@ -35,7 +35,9 @@
 
 
 //==================================================================================================
-/// Internal root finding class to find a well Pressure that gives a zero SigmaT
+/// Internal root finding class to find a Well Pressure that gives:
+/// a) a zero SigmaT for estimating the fracture gradient.
+/// b) a solution to the Stassi-d'Alia failure criterion for estimating the shear failure gradient.
 //==================================================================================================
 
 //--------------------------------------------------------------------------------------------------
@@ -90,7 +92,8 @@ cvf::Vec3f RigGeoMechWellLogExtractor::BoreHoleStressCalculator::principleStress
 }
 
 //--------------------------------------------------------------------------------------------------
-///
+/// Bi-section root finding method: https://en.wikipedia.org/wiki/Bisection_method
+/// Used as fall-back in case the secant method doesn't converge.
 //--------------------------------------------------------------------------------------------------
 float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveBisection(float minPw, float maxPw, MemberFunc fn, float* thetaOut)
 {
@@ -103,7 +106,6 @@ float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveBisection(float
     float maxPwFuncVal = std::invoke(fn, this, maxPw, &theta);
     float range = maxPw - minPw;
     
-    // Bi-section root finding method: https://en.wikipedia.org/wiki/Bisection_method
     int i = 0;
     for (; i <= N && range > m_porePressure * epsilon; ++i)
     {
@@ -121,100 +123,25 @@ float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveBisection(float
         }
         range = maxPw - minPw;
     }
-    CVF_ASSERT(i < N); // Otherwise it hasn't converged
-                       // Return linear solution between minPw and maxPw.
+    CVF_ASSERT(i < N); // Otherwise it hasn't converged                       
 
     if (thetaOut)
     {
         *thetaOut = theta;
     }
-
+    
+    // Return linear solution between minPw and maxPw.
     return minPw - minPwFuncVal * (maxPw - minPw) / (maxPwFuncVal - minPwFuncVal);
 }
 
 //--------------------------------------------------------------------------------------------------
-///
-//--------------------------------------------------------------------------------------------------
-float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveRegularFalsi(MemberFunc fn, float* thetaOut)
-{
-    const int N = 100;
-    const float epsilon = 1.0e-6f;
-
-    float theta = 0.0;
-
-    float xl = 0.0;
-    float xr = m_porePressure;
-
-    float f_xl = std::invoke(fn, this, xl, &theta);
-    float f_xr = std::invoke(fn, this, xr, &theta);
-
-    float xm = xm = (xl * f_xr - xr * f_xl) / (f_xr - f_xl);
-    float f_xm = std::invoke(fn, this, xm, &theta);
-
-    if (f_xr * f_xl > 0.0) // Original interval was bad
-    {
-        if (f_xm * f_xl < 0.0)
-        {
-            xr = xm;
-            f_xr = f_xm;
-        }
-        else if (f_xm * f_xr < 0.0)
-        {
-            xl = xm;
-            f_xl = f_xm;
-        }
-        else
-        {
-            CVF_ASSERT(false); // Bad interval
-        }
-    }
-
-
-    // Regular Falsi root finding method: https://en.wikipedia.org/wiki/False_position_method
-    int i = 0;
-    int side = 0;
-    for (; i <= N; ++i)
-    {
-        xm = (xl * f_xr - xr * f_xl) / (f_xr - f_xl);
-        if (std::abs(xr - xl) < epsilon * std::abs(xr + xl)) break;
-        float f_xm = std::invoke(fn, this, xm, &theta);
-
-        if (f_xm * f_xr > 0.0)
-        {
-            xr = xm;
-            f_xr = f_xm;
-            if (side == -1) f_xl /= 2;
-            side = -1;
-        }
-        else if (f_xm * f_xl > 0.0)
-        {
-            xl = xm;
-            f_xl = f_xm;
-            if (side == 1) f_xr /= 2;
-            side = 1;
-        }
-        else {
-            break;
-        }
-    }
-    CVF_ASSERT(i < N); // Otherwise it hasn't converged
-                       // Return linear solution between minPw and maxPw.
-
-    if (thetaOut)
-    {
-        *thetaOut = theta;
-    }
-
-    return xr;
-}
-
-//--------------------------------------------------------------------------------------------------
-///
+/// Secant root finding method: https://en.wikipedia.org/wiki/Secant_method
+/// Basically a Newton's method using finite differences for the derivative.
 //--------------------------------------------------------------------------------------------------
 float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveSecant(MemberFunc fn, float* thetaOut)
 {
     const float epsilon = 1.0e-8f;
-    const int N = 200;
+    const int N = 50;
     float theta = 0.0;
 
     float x_0 = 0.0;    
@@ -234,8 +161,13 @@ float RigGeoMechWellLogExtractor::BoreHoleStressCalculator::solveSecant(MemberFu
         x_1 = x;
         f_x1 = f_x;        
     }
-    CVF_ASSERT(i < N); // Otherwise it hasn't converged
-                       // Return linear solution between minPw and maxPw.
+
+    if (i == N)
+    {
+        // Fallback to bisection rest of the way if secant doesn't converge.
+        // Hopefully [x_0, x_1] is an interval containing the root now.
+        return solveBisection(x_0, x_1, fn, thetaOut);
+    }
 
     if (thetaOut)
     {
