@@ -47,6 +47,7 @@ public:
     RigFemPartResultsCollection*         femPartResults();
     const RigFemPartResultsCollection*   femPartResults() const;
 
+    void                                 setTimeStepFilter(const std::vector<size_t>& fileTimeStepIndices);
 private:
     std::string                                  m_geoMechCaseFileName;
     cvf::ref<RigFemPartCollection>               m_femParts;

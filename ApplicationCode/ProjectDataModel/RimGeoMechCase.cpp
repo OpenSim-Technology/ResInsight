@@ -39,9 +39,11 @@
 #include "RimIntersectionCollection.h"
 #include "RimMainPlotCollection.h"
 #include "RimProject.h"
+#include "RimTimeStepFilter.h"
 #include "RimTools.h"
 #include "RimWellLogPlotCollection.h"
 
+#include "cafPdmUiPropertyViewDialog.h"
 #include "cafPdmUiPushButtonEditor.h"
 #include "cafPdmUiTreeOrdering.h"
 #include "cafUtils.h"
@@ -54,6 +56,7 @@ CAF_PDM_SOURCE_INIT(RimGeoMechCase, "ResInsightGeoMechCase");
 /// 
 //--------------------------------------------------------------------------------------------------
 RimGeoMechCase::RimGeoMechCase(void)
+    : m_applyTimeFilter(false)
 {
     CAF_PDM_InitObject("Geomechanical Case", ":/GeoMechCase48x48.png", "", "");
 
@@ -184,15 +187,43 @@ bool RimGeoMechCase::openGeoMechCase(std::string* errorMessage)
         m_geoMechCaseData->femPartResults()->setActiveFormationNames(nullptr);
     }
 
-    if (m_geoMechCaseData.notNull())
+    if (m_applyTimeFilter)
     {
-        std::vector<QString> fileNames;
-        for (const caf::FilePath& fileName : m_elementPropertyFileNames.v())
+        // Restore cursor as the progress dialog is active
+        QApplication::restoreOverrideCursor();
+
+        std::vector<std::pair<QString, QDateTime>> timeSteps;
+        QStringList timeStepStrings = this->timeStepStrings();
+        for (const QString& timeStepString : timeStepStrings)
         {
-            fileNames.push_back(fileName.path());
+            timeSteps.push_back(std::make_pair(timeStepString, dateTimeFromTimeStepString(timeStepString)));
         }
-        geoMechData()->femPartResults()->addElementPropertyFiles(fileNames);
+
+        m_timeStepFilter->setTimeStepsFromFile(timeSteps);
+
+        caf::PdmUiPropertyViewDialog propertyDialog(nullptr, m_timeStepFilter, "Time Step Filter", "", QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        propertyDialog.resize(QSize(400, 400));
+
+        if (propertyDialog.exec() != QDialog::Accepted)
+        {
+            m_geoMechCaseData = nullptr;
+            return false;
+        }
+
+        m_timeStepFilter->clearTimeStepsFromFile();
+        m_geoMechCaseData->setTimeStepFilter(m_timeStepFilter->filteredNativeTimeStepIndices());
+
+        // Set cursor in wait state to continue display of progress dialog including
+        // wait cursor
+        QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
     }
+
+    std::vector<QString> fileNames;
+    for (const caf::FilePath& fileName : m_elementPropertyFileNames.v())
+    {
+        fileNames.push_back(fileName.path());
+    }
+    geoMechData()->femPartResults()->addElementPropertyFiles(fileNames);    
 
     return fileOpenSuccess;
 }
@@ -244,7 +275,7 @@ std::vector<QDateTime> RimGeoMechCase::timeStepDates() const
 {
     QStringList timeStrings = timeStepStrings();
 
-    return RimGeoMechCase::dateTimeVectorFromTimeStepStrings(timeStrings);
+    return RimGeoMechCase::vectorOfValidDateTimesFromTimeStepStrings(timeStrings);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -400,6 +431,14 @@ double RimGeoMechCase::frictionAngleDeg() const
 }
 
 //--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+void RimGeoMechCase::setApplyTimeFilter(bool applyTimeFilter)
+{
+    m_applyTimeFilter = applyTimeFilter;
+}
+
+//--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
 cvf::Vec3d RimGeoMechCase::displayModelOffset() const
@@ -410,19 +449,15 @@ cvf::Vec3d RimGeoMechCase::displayModelOffset() const
 //--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
-std::vector<QDateTime> RimGeoMechCase::dateTimeVectorFromTimeStepStrings(const QStringList& timeStepStrings)
+std::vector<QDateTime> RimGeoMechCase::vectorOfValidDateTimesFromTimeStepStrings(const QStringList& timeStepStrings)
 {
     std::vector<QDateTime> dates;
 
-    QString dateFormat = "ddMMyyyy";
+    QString dateFormat = "yyyyMMdd";
 
-    for (int i = 0; i < timeStepStrings.size(); i++)
+    for (const QString& timeStepString : timeStepStrings)
     {
-        QString timeStepString = timeStepStrings[i];
-
-        QString dateStr = subStringOfDigits(timeStepString, dateFormat.size());
-
-        QDateTime dateTime = QDateTime::fromString(dateStr, dateFormat);
+        QDateTime dateTime = dateTimeFromTimeStepString(timeStepString);
         if (dateTime.isValid())
         {
             dates.push_back(dateTime);
@@ -430,6 +465,16 @@ std::vector<QDateTime> RimGeoMechCase::dateTimeVectorFromTimeStepStrings(const Q
     }
 
     return dates;
+}
+
+//--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+QDateTime RimGeoMechCase::dateTimeFromTimeStepString(const QString& timeStepString)
+{
+    QString dateFormat = "yyyyMMdd";
+    QString dateStr = subStringOfDigits(timeStepString, dateFormat.size());
+    return QDateTime::fromString(dateStr, dateFormat);
 }
 
 //--------------------------------------------------------------------------------------------------

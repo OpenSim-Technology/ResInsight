@@ -431,8 +431,11 @@ std::vector<std::string> RifOdbReader::stepNames() const
     odb_StepRepository stepRepository = m_odb->steps();
     odb_StepRepositoryIT sIter(stepRepository);
     for (sIter.first(); !sIter.isDone(); sIter.next()) 
-    {
-        stepNames.push_back(stepRepository[sIter.currentKey()].name().CStr());
+    {        
+        if (this->isTimeStepIncludedByFilter(sIter.currentValue().number()))
+        {
+            stepNames.push_back(sIter.currentValue().name().CStr());
+        }
     }
 
     return stepNames;
@@ -449,7 +452,11 @@ std::vector<double> RifOdbReader::frameTimes(int stepIndex) const
     odb_StepRepository& stepRepository = m_odb->steps();
 
     odb_StepList stepList = stepRepository.stepList();
-    odb_Step& step = stepList.Get(stepIndex);
+
+    CVF_ASSERT(this->isTimeStepIncludedByFilter(stepIndex));
+    int stepFileIndex = this->timeStepIndexOnFile(stepIndex);
+
+    odb_Step& step = stepList.Get(stepFileIndex);
     
     odb_SequenceFrame& stepFrames = step.frames();
 
@@ -573,7 +580,11 @@ const odb_Frame& RifOdbReader::stepFrame(int stepIndex, int frameIndex) const
 
     const odb_StepRepository& stepRepository = m_odb->steps();
     const odb_StepList& stepList = stepRepository.stepList();
-    const odb_Step& step = stepList.ConstGet(stepIndex);
+
+    CVF_ASSERT(this->isTimeStepIncludedByFilter(stepIndex));
+    int stepFileIndex = this->timeStepIndexOnFile(stepIndex);
+
+    const odb_Step& step = stepList.ConstGet(stepFileIndex);
     const odb_SequenceFrame& stepFrames = step.frames();
 
     return stepFrames.constGet(frameIndex);
@@ -613,7 +624,10 @@ size_t RifOdbReader::resultItemCount(const std::string& fieldName, int partIndex
     odb_Instance* partInstance = instance(partIndex);
     CVF_ASSERT(partInstance != NULL);
 
-    const odb_Frame& frame = stepFrame(stepIndex, frameIndex);
+    CVF_ASSERT(this->isTimeStepIncludedByFilter(stepIndex));
+    int stepFileIndex = this->timeStepIndexOnFile(stepIndex);
+
+    const odb_Frame& frame = stepFrame(stepFileIndex, frameIndex);
     const odb_FieldOutput& instanceFieldOutput = frame.fieldOutputs()[fieldName.c_str()].getSubset(*partInstance);
     const odb_SequenceFieldBulkData& seqFieldBulkData = instanceFieldOutput.bulkDataBlocks();
 
@@ -715,13 +729,16 @@ void RifOdbReader::readDisplacements(int partIndex, int stepIndex, int frameInde
     odb_Instance* partInstance = instance(partIndex);
     CVF_ASSERT(partInstance != NULL);
 
-    size_t dataSize = resultItemCount("U", partIndex, stepIndex, frameIndex);
+    CVF_ASSERT(this->isTimeStepIncludedByFilter(stepIndex));
+    int stepFileIndex = this->timeStepIndexOnFile(stepIndex);
+
+    size_t dataSize = resultItemCount("U", partIndex, stepFileIndex, frameIndex);
     if (dataSize > 0)
     {
         displacements->resize(dataSize);
     }
 
-    const odb_Frame& frame = stepFrame(stepIndex, frameIndex);
+    const odb_Frame& frame = stepFrame(stepFileIndex, frameIndex);
     const odb_FieldOutput& instanceFieldOutput = frame.fieldOutputs()["U"].getSubset(*partInstance);
     const odb_SequenceFieldBulkData& seqFieldBulkData = instanceFieldOutput.bulkDataBlocks();
 
@@ -776,7 +793,11 @@ void RifOdbReader::readNodeField(const std::string& fieldName, int partIndex, in
         }
     }
 
-    const odb_Frame& frame = stepFrame(stepIndex, frameIndex);
+
+    CVF_ASSERT(this->isTimeStepIncludedByFilter(stepIndex));
+    int stepFileIndex = this->timeStepIndexOnFile(stepIndex);
+
+    const odb_Frame& frame = stepFrame(stepFileIndex, frameIndex);
     const odb_FieldOutput& instanceFieldOutput = frame.fieldOutputs()[fieldName.c_str()].getSubset(*partInstance);
     const odb_FieldOutput& fieldOutput = instanceFieldOutput.getSubset(odb_Enum::NODAL);
     const odb_SequenceFieldBulkData& seqFieldBulkData = fieldOutput.bulkDataBlocks();
@@ -819,7 +840,10 @@ void RifOdbReader::readElementNodeField(const std::string& fieldName,
     size_t compCount = componentsCount(fieldName, ELEMENT_NODAL);
     CVF_ASSERT(compCount == resultValues->size());
 
-    size_t dataSize = resultItemCount(fieldName, partIndex, stepIndex, frameIndex);
+    CVF_ASSERT(this->isTimeStepIncludedByFilter(stepIndex));
+    int stepFileIndex = this->timeStepIndexOnFile(stepIndex);
+
+    size_t dataSize = resultItemCount(fieldName, partIndex, stepFileIndex, frameIndex);
     if (dataSize > 0)
     {
         for (int comp = 0; comp < compCount; comp++)
@@ -830,7 +854,7 @@ void RifOdbReader::readElementNodeField(const std::string& fieldName,
         }
     }
 
-    const odb_Frame& frame = stepFrame(stepIndex, frameIndex);
+    const odb_Frame& frame = stepFrame(stepFileIndex, frameIndex);
     const odb_FieldOutput& instanceFieldOutput = frame.fieldOutputs()[fieldName.c_str()].getSubset(*partInstance);
     const odb_FieldOutput& fieldOutput = instanceFieldOutput.getSubset(odb_Enum::ELEMENT_NODAL);
     const odb_SequenceFieldBulkData& seqFieldBulkData = fieldOutput.bulkDataBlocks();
@@ -885,7 +909,10 @@ void RifOdbReader::readIntegrationPointField(const std::string& fieldName, int p
     size_t compCount = componentsCount(fieldName, INTEGRATION_POINT);
     CVF_ASSERT(compCount == resultValues->size());
 
-    size_t dataSize = resultItemCount(fieldName, partIndex, stepIndex, frameIndex);
+    CVF_ASSERT(this->isTimeStepIncludedByFilter(stepIndex));
+    int stepFileIndex = this->timeStepIndexOnFile(stepIndex);
+
+    size_t dataSize = resultItemCount(fieldName, partIndex, stepFileIndex, frameIndex);
     if (dataSize > 0)
     {
         for (int comp = 0; comp < compCount; comp++)
@@ -896,7 +923,7 @@ void RifOdbReader::readIntegrationPointField(const std::string& fieldName, int p
         }
     }
 
-    const odb_Frame& frame = stepFrame(stepIndex, frameIndex);
+    const odb_Frame& frame = stepFrame(stepFileIndex, frameIndex);
     const odb_FieldOutput& instanceFieldOutput = frame.fieldOutputs()[fieldName.c_str()].getSubset(*partInstance);
     const odb_FieldOutput& fieldOutput = instanceFieldOutput.getSubset(odb_Enum::INTEGRATION_POINT);
     const odb_SequenceFieldBulkData& seqFieldBulkData = fieldOutput.bulkDataBlocks();

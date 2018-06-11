@@ -391,6 +391,7 @@ void RiuMainWindow::createMenus()
     importMenu->addSeparator();
     QMenu* importGeoMechMenu = importMenu->addMenu(QIcon(":/GeoMechCase48x48.png"), "Geo Mechanical Cases");
     importGeoMechMenu->addAction(cmdFeatureMgr->action("RicImportGeoMechCaseFeature"));
+    importGeoMechMenu->addAction(cmdFeatureMgr->action("RicImportGeoMechCaseTimeStepFilterFeature"));
     importGeoMechMenu->addAction(cmdFeatureMgr->action("RicImportElementPropertyFeature"));
     #endif
 

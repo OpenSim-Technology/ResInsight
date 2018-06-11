@@ -24,6 +24,7 @@
 #include "RimReservoirCellResultsStorage.h"
 #include "RimTools.h"
 
+#include "cafPdmUiListEditor.h"
 #include "cafPdmUiPushButtonEditor.h"
 #include "cafPdmUiTextEditor.h"
 
@@ -67,12 +68,12 @@ RimTimeStepFilter::RimTimeStepFilter()
 
     CAF_PDM_InitField(&m_interval, "Interval", 1, "Interval", "", "", "");
 
-    CAF_PDM_InitField(&m_filteredTimeStepsText, "FilteredTimeSteps", QString(), "Filtered TimeSteps", "", "", "");
-    m_filteredTimeStepsText.uiCapability()->setUiEditorTypeName(caf::PdmUiTextEditor::uiEditorTypeName());
-    m_filteredTimeStepsText.uiCapability()->setUiReadOnly(true);
-    m_filteredTimeStepsText.uiCapability()->setUiLabelPosition(caf::PdmUiItemInfo::HIDDEN);
+    CAF_PDM_InitField(&m_filteredTimeSteps, "FilteredTimeSteps", std::vector<QString>(), "Select From Filtered TimeSteps", "", "", "");    
+    m_filteredTimeSteps.uiCapability()->setUiEditorTypeName(caf::PdmUiListEditor::uiEditorTypeName());
+    m_filteredTimeSteps.uiCapability()->setUiReadOnly(false);
+    m_filteredTimeSteps.uiCapability()->setUiLabelPosition(caf::PdmUiItemInfo::TOP);
 
-    m_filteredTimeStepsText.xmlCapability()->disableIO();
+    m_filteredTimeSteps.xmlCapability()->disableIO();
 
     CAF_PDM_InitFieldNoDefault(&m_applyReloadOfCase, "ApplyReloadOfCase", "", "", "", "");
     caf::PdmUiPushButtonEditor::configureEditorForField(&m_applyReloadOfCase);
@@ -82,6 +83,23 @@ RimTimeStepFilter::RimTimeStepFilter()
 /// 
 //--------------------------------------------------------------------------------------------------
 void RimTimeStepFilter::setTimeStepsFromFile(const std::vector<QDateTime>& timeSteps)
+{
+    QString formatString = RimTools::createTimeFormatStringFromDates(timeSteps);
+    for (const QDateTime& date : timeSteps)
+    {
+        m_timeStepsFromFile.push_back(std::make_pair(date.toString(formatString), date));
+    }
+
+    m_lastTimeStep = static_cast<int>(timeSteps.size()) - 1;
+
+    updateSelectedTimeStepIndices();
+    updateDerivedData();
+}
+
+//--------------------------------------------------------------------------------------------------
+/// 
+//--------------------------------------------------------------------------------------------------
+void RimTimeStepFilter::setTimeStepsFromFile(const std::vector<std::pair<QString, QDateTime>>& timeSteps)
 {
     m_timeStepsFromFile = timeSteps;
 
@@ -151,13 +169,11 @@ QList<caf::PdmOptionItemInfo> RimTimeStepFilter::calculateValueOptions(const caf
     if (fieldNeedingOptions == &m_firstTimeStep ||
         fieldNeedingOptions == &m_lastTimeStep)
     {
-        std::vector<QDateTime> timeSteps = allTimeSteps();
-
-        QString formatString = RimTools::createTimeFormatStringFromDates(timeSteps);
+        std::vector<std::pair<QString, QDateTime>> timeSteps = allTimeSteps();
 
         for (size_t i = 0; i < timeSteps.size(); i++)
         {
-            optionItems.push_back(caf::PdmOptionItemInfo(timeSteps[i].toString(formatString), static_cast<int>(i)));
+            optionItems.push_back(caf::PdmOptionItemInfo(timeSteps[i].first, static_cast<int>(i)));
         }
     }
 
@@ -182,13 +198,11 @@ void RimTimeStepFilter::defineEditorAttribute(const caf::PdmFieldHandle* field, 
 //--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
-QString RimTimeStepFilter::filteredTimeStepsAsText() const
+std::vector<QString> RimTimeStepFilter::filteredTimeStepsAsText() const
 {
-    QString text;
+    std::vector<QString> textList;
 
-    std::vector<QDateTime> timeSteps = allTimeSteps();
-
-    QString formatString = RimTools::createTimeFormatStringFromDates(timeSteps);
+    std::vector<std::pair<QString, QDateTime>> timeSteps = allTimeSteps();
 
     for (auto selectedIndex : m_selectedTimeStepIndices.v())
     {
@@ -196,12 +210,12 @@ QString RimTimeStepFilter::filteredTimeStepsAsText() const
 
         if (timeStepIndex < timeSteps.size())
         {
-            text += timeSteps[timeStepIndex].toString(formatString);
-            text += "\n";
+            textList.push_back(timeSteps[timeStepIndex].first);
+            
         }
     }
 
-    return text;
+    return textList;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -209,7 +223,17 @@ QString RimTimeStepFilter::filteredTimeStepsAsText() const
 //--------------------------------------------------------------------------------------------------
 void RimTimeStepFilter::updateDerivedData()
 {
-    m_filteredTimeStepsText = filteredTimeStepsAsText();
+    m_filteredTimeSteps = filteredTimeStepsAsText();    
+
+    for (const auto& e : m_filteredTimeSteps.uiCapability()->connectedEditors())
+    {
+        caf::PdmUiListEditor* listEditor = dynamic_cast<caf::PdmUiListEditor*>(e);
+        if (listEditor)
+        {
+            listEditor->
+        }
+    }
+
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -223,14 +247,20 @@ void RimTimeStepFilter::updateSelectedTimeStepIndices()
 //--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
-std::vector<QDateTime> RimTimeStepFilter::allTimeSteps() const
+std::vector<std::pair<QString, QDateTime>> RimTimeStepFilter::allTimeSteps() const
 {
     RimEclipseResultCase* rimEclipseResultCase = parentEclipseResultCase();
     if (rimEclipseResultCase && rimEclipseResultCase->results(RiaDefines::MATRIX_MODEL))
     {
-        return  rimEclipseResultCase->results(RiaDefines::MATRIX_MODEL)->allTimeStepDatesFromEclipseReader();
+        std::vector<QDateTime> timeStepDates = rimEclipseResultCase->results(RiaDefines::MATRIX_MODEL)->allTimeStepDatesFromEclipseReader();
+        QString formatString = RimTools::createTimeFormatStringFromDates(timeStepDates);
+        std::vector<std::pair<QString, QDateTime>> timeSteps;
+        for (const QDateTime& date : timeStepDates)
+        {
+            timeSteps.push_back(std::make_pair(date.toString(formatString), date));
+        }
+        return  timeSteps;
     }
-
     return m_timeStepsFromFile;
 }
 
@@ -271,15 +301,24 @@ std::vector<int> RimTimeStepFilter::selectedTimeStepIndicesFromUi() const
 
         int daysToSkip = m_interval * intervalFactor;
 
-
-        std::vector<QDateTime> timeSteps = allTimeSteps();
+        std::vector<std::pair<QString, QDateTime>> timeSteps = allTimeSteps();
 
         indices.push_back(m_firstTimeStep);
-        QDateTime d = timeSteps[m_firstTimeStep].addDays(daysToSkip);
-
-        for (int i = m_firstTimeStep + 1; i <= m_lastTimeStep; i++)
+        int firstValidTimeStep = m_firstTimeStep;
+        if (!timeSteps[firstValidTimeStep].second.isValid())
         {
-            if (timeSteps[i] > d)
+            while (!timeSteps[firstValidTimeStep].second.isValid())
+            {
+                ++firstValidTimeStep;
+            }
+            indices.push_back(firstValidTimeStep);            
+        }
+
+        QDateTime d = timeSteps[firstValidTimeStep].second.addDays(daysToSkip);
+
+        for (int i = firstValidTimeStep + 1; i <= m_lastTimeStep; i++)
+        {
+            if (timeSteps[i].second > d)
             {
                 d = d.addDays(daysToSkip);
                 indices.push_back(i);
@@ -334,7 +373,7 @@ void RimTimeStepFilter::defineUiOrdering(QString uiConfigName, caf::PdmUiOrderin
     QString displayUiName = QString("Filtered Time Steps (%1)").arg(m_selectedTimeStepIndices().size());
 
     caf::PdmUiGroup* group = uiOrdering.addNewGroupWithKeyword(displayUiName, "FilteredTimeStepKeyword");
-    group->add(&m_filteredTimeStepsText);
+    group->add(&m_filteredTimeSteps);
 
     if (m_timeStepsFromFile.size() == 0)
     {

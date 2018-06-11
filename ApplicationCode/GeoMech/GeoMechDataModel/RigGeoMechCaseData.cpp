@@ -88,6 +88,17 @@ RigFemPartResultsCollection* RigGeoMechCaseData::femPartResults()
 }
 
 //--------------------------------------------------------------------------------------------------
+///
+//--------------------------------------------------------------------------------------------------
+void RigGeoMechCaseData::setTimeStepFilter(const std::vector<size_t>& fileTimeStepIndices)
+{
+#ifdef USE_ODB_API
+    CVF_ASSERT(m_readerInterface.notNull());
+    m_readerInterface->setTimeStepFilter(fileTimeStepIndices);
+#endif
+}
+
+//--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
 bool RigGeoMechCaseData::openAndReadFemParts(std::string* errorMessage)

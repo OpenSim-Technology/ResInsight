@@ -36,3 +36,45 @@ RifGeoMechReaderInterface::~RifGeoMechReaderInterface()
 {
 
 }
+
+//--------------------------------------------------------------------------------------------------
+/// 
+//--------------------------------------------------------------------------------------------------
+void RifGeoMechReaderInterface::setTimeStepFilter(const std::vector<size_t>& fileTimeStepIndices)
+{
+    m_fileTimeStepIndices = fileTimeStepIndices;
+}
+
+
+//--------------------------------------------------------------------------------------------------
+/// 
+//--------------------------------------------------------------------------------------------------
+bool RifGeoMechReaderInterface::isTimeStepIncludedByFilter(size_t timeStepIndex) const
+{
+    if (m_fileTimeStepIndices.empty()) return true;
+
+    for (auto i : m_fileTimeStepIndices)
+    {
+        if (i == timeStepIndex)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+//--------------------------------------------------------------------------------------------------
+/// 
+//--------------------------------------------------------------------------------------------------
+size_t RifGeoMechReaderInterface::timeStepIndexOnFile(size_t timeStepIndex) const
+{
+    CVF_ASSERT(timeStepIndex < m_fileTimeStepIndices.size());
+
+    if (timeStepIndex < m_fileTimeStepIndices.size())
+    {
+        return m_fileTimeStepIndices[timeStepIndex];
+    }
+
+    return timeStepIndex;
+}

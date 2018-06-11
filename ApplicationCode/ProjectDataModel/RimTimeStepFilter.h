@@ -48,17 +48,18 @@ public:
     RimTimeStepFilter();
 
     void                    setTimeStepsFromFile(const std::vector<QDateTime>& timeSteps);
+    void                    setTimeStepsFromFile(const std::vector<std::pair<QString, QDateTime>>& timeSteps);
     void                    clearTimeStepsFromFile();
     
     std::vector<size_t>     filteredNativeTimeStepIndices() const;
 
 private:
-    QString                 filteredTimeStepsAsText() const;
+    std::vector<QString>    filteredTimeStepsAsText() const;
 
     void                    updateDerivedData();
     void                    updateSelectedTimeStepIndices();
 
-    std::vector<QDateTime>  allTimeSteps() const;
+    std::vector<std::pair<QString, QDateTime>>  allTimeSteps() const;
     std::vector<int>        selectedTimeStepIndicesFromUi() const;
 
     void                    updateFieldVisibility();
@@ -80,9 +81,9 @@ private:
     caf::PdmField<int>      m_lastTimeStep;
     caf::PdmField<int>      m_interval;
 
-    caf::PdmField<QString>  m_filteredTimeStepsText;
+    caf::PdmField<std::vector<QString>>  m_filteredTimeSteps;    
 
     caf::PdmField<bool>     m_applyReloadOfCase;
 
-    std::vector<QDateTime>  m_timeStepsFromFile; /// Temporarily set to provide correct options before the case data structures are operative
+    std::vector<std::pair<QString, QDateTime>>  m_timeStepsFromFile; /// Temporarily set to provide correct options before the case data structures are operative
 };

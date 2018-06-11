@@ -60,5 +60,9 @@ public:
     virtual void                                             readElementNodeField(const std::string& fieldName, int partIndex, int stepIndex, int frameIndex, std::vector<std::vector<float>*>* resultValues) = 0;
     virtual void                                             readIntegrationPointField(const std::string& fieldName, int partIndex, int stepIndex, int frameIndex, std::vector<std::vector<float>*>* resultValues) = 0;
 
+    void                                                     setTimeStepFilter(const std::vector<size_t>& fileTimeStepIndices);
+    bool                                                     isTimeStepIncludedByFilter(size_t timeStepIndex) const;
+    size_t                                                   timeStepIndexOnFile(size_t timeStepIndex) const;
 private:
+    std::vector<size_t>                                      m_fileTimeStepIndices;
 };

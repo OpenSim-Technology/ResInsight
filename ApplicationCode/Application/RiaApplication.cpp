@@ -1077,7 +1077,7 @@ QString RiaApplication::createAbsolutePathFromProjectRelativePath(QString projec
 //--------------------------------------------------------------------------------------------------
 /// 
 //--------------------------------------------------------------------------------------------------
-bool RiaApplication::openOdbCaseFromFile(const QString& fileName)
+bool RiaApplication::openOdbCaseFromFile(const QString& fileName, bool applyTimeStepFilter)
 {
     if (!caf::Utils::fileExists(fileName)) return false;
 
@@ -1087,7 +1087,8 @@ bool RiaApplication::openOdbCaseFromFile(const QString& fileName)
     RimGeoMechCase* geoMechCase = new RimGeoMechCase();
     geoMechCase->setFileName(fileName);
     geoMechCase->caseUserDescription = caseName;
-
+    geoMechCase->setApplyTimeFilter(applyTimeStepFilter);
+    
     RimGeoMechModels* geoMechModelCollection = m_project->activeOilField() ? m_project->activeOilField()->geoMechModels() : nullptr;
 
     // Create the geoMech model container if it is not there already
@@ -1104,7 +1105,7 @@ bool RiaApplication::openOdbCaseFromFile(const QString& fileName)
     progress.setNextProgressIncrement(10);
 
     riv->loadDataAndUpdate();
-
+        
     //if (!riv->cellResult()->hasResult())
     //{
     //    riv->cellResult()->setResultVariable(RiaDefines::undefinedResultName());
